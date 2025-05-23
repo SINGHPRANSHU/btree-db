@@ -8,11 +8,17 @@ import (
 )
 
 type TableMetadata struct {
+	name  string
 	types []DataType
 }
 
-func NewTableMetadata() *TableMetadata {
+func (t *TableMetadata) GetName() string {
+	return t.name
+}
+
+func NewTableMetadata(name string) *TableMetadata {
 	return &TableMetadata{
+		name:  name,
 		types: []DataType{},
 	}
 }
@@ -26,6 +32,12 @@ func (t *TableMetadata) GetTypes() []DataType {
 // This will contain 64 bit for size of type and 64 bit for column name length and 64 bit for type len and type and the name length
 func (t *TableMetadata) Serialize() []byte {
 	var serialized []byte
+	nameBytes := []byte(t.name)
+	nameLen := len(nameBytes)
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, uint64(nameLen))
+	serialized = append(serialized, b...)
+	serialized = append(serialized, nameBytes...)
 	for _, dataType := range t.types {
 		b := make([]byte, 8)
 		binary.LittleEndian.PutUint64(b, uint64(dataType.GetSize()))
@@ -50,6 +62,11 @@ func (t *TableMetadata) Serialize() []byte {
 func Deserialize(data []byte) *TableMetadata {
 	tableMetadata := &TableMetadata{}
 	i := 0
+	nameLen := binary.LittleEndian.Uint64(data[i : i+8])
+	i += 8
+	name := string(data[i : i+int(nameLen)])
+	i += int(nameLen)
+	tableMetadata.name = name
 	for i < len(data) {
 		size := binary.LittleEndian.Uint64(data[i : i+8])
 		i += 8

@@ -2,6 +2,7 @@ package bplustree
 
 import (
 	"encoding/binary"
+	"os"
 
 	"github.com/singhpranshu/btree-db/src/constant"
 	"github.com/singhpranshu/btree-db/src/datatype"
@@ -29,6 +30,19 @@ type BPlusTree struct {
 	store      storage.Storage
 	table      *datatype.TableMetadata
 	valueStore storage.Storage
+}
+
+func (btree *BPlusTree) GetStore() storage.Storage {
+	return btree.store
+}
+func (btree *BPlusTree) GetValueStore() storage.Storage {
+	return btree.valueStore
+}
+func (btree *BPlusTree) GetTable() *datatype.TableMetadata {
+	return btree.table
+}
+func (btree *BPlusTree) GetDegree() int64 {
+	return degree
 }
 
 func (node *Node) getChild(position int64) *Node {
@@ -80,6 +94,44 @@ func (node *Node) saveValue(value map[string]interface{}) int64 {
 		}
 	}
 	return pos
+}
+
+func LoadAllExistingBPlusTree() []*BPlusTree {
+	dir, err := os.ReadDir(constant.RootFolder + "/")
+	if err != nil {
+		panic("failed to read directory")
+	}
+	var btrees []*BPlusTree
+	for _, entry := range dir {
+		if entry.IsDir() {
+			btree := &BPlusTree{
+				Size: 3,
+			}
+			degree = 2 * 3
+			tableName := entry.Name()
+			tableMeta, err := datatype.Load(tableName)
+			if err != nil {
+				panic("failed to load table")
+			}
+			btree.table = tableMeta
+			tabledir, err := os.ReadDir(constant.RootFolder + "/" + tableName)
+			if err != nil {
+				panic("failed to read directory")
+			}
+			for _, entry := range tabledir {
+				if !entry.IsDir() && entry.Name() != "schema" && entry.Name() != "value" {
+					indexName := entry.Name()
+					store := *storage.NewFileStorage(constant.RootFolder+"/"+tableName+"/"+indexName, storage.NewMutex())
+					btree.store = store
+				}
+			}
+			valueStore := *storage.NewFileStorage(constant.RootFolder+"/"+tableName+"/"+"value", storage.NewMutex())
+			btree.valueStore = valueStore
+			btrees = append(btrees, btree)
+
+		}
+	}
+	return btrees
 }
 
 func NewBPlusTree(size int64, indexName string, tableName string, tableMeta *datatype.TableMetadata) *BPlusTree {
