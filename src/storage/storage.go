@@ -2,30 +2,43 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"sync"
 )
 
 type Storage interface {
 	Append(node []byte) (int64, error)
 	GetAtPosition(position int64, nodeSize int64) ([]byte, error)
 	UpdateAt(position int64, node []byte) error
+	CreateDirectory(folderName string) error
 }
 
 type FileStorage struct {
+	mutex *sync.RWMutex
 	fileName string
+	storagePool *StoragePool
 }
 
-func NewFileStorage(fileName string) *FileStorage {
+func NewFileStorage(fileName string, mutex *sync.RWMutex) *FileStorage {
+	storagePool := NewStoragePool()
 	return &FileStorage{
 		fileName: fileName,
+		mutex: mutex,
+		storagePool: storagePool,
 	}
 }
 func (fs FileStorage) Append(node []byte) (int64, error) {
+	fs.storagePool.GetWorker()
+	defer fs.storagePool.ReleaseWorker()
+	fs.mutex.Lock()
 	file, err := os.OpenFile(fs.fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
+		fmt.Println(err)
 		return 0, errors.New("failed to open file")
 	}
+	defer fs.mutex.Unlock()
 	defer file.Close()
 	_, err = file.Write(node)
 	if err != nil {
@@ -43,6 +56,10 @@ func (fs FileStorage) Append(node []byte) (int64, error) {
 }
 
 func (fs FileStorage) GetAtPosition(position int64, nodeSize int64) ([]byte, error) {
+	fs.storagePool.GetWorker()
+	defer fs.storagePool.ReleaseWorker()
+	fs.mutex.RLock()
+	defer fs.mutex.RUnlock()
 	file, err := os.OpenFile(fs.fileName, os.O_RDONLY, 0644)
 	if err != nil {
 		return nil, errors.New("failed to open file")
@@ -58,6 +75,10 @@ func (fs FileStorage) GetAtPosition(position int64, nodeSize int64) ([]byte, err
 }
 
 func (fs FileStorage) UpdateAt(position int64, node []byte) error {
+	fs.storagePool.GetWorker()
+	defer fs.storagePool.ReleaseWorker()
+	fs.mutex.Lock()
+	defer fs.mutex.Unlock()
 	file, err := os.OpenFile(fs.fileName, os.O_RDWR, 0644)
 	if err != nil {
 		return errors.New("failed to open file")
@@ -72,4 +93,18 @@ func (fs FileStorage) UpdateAt(position int64, node []byte) error {
 		return errors.New("failed to write to file")
 	}
 	return nil
+}
+
+
+func (fs FileStorage) CreateDirectory(folderName string) error {
+	err := os.Mkdir(folderName, os.ModePerm)
+	if err != nil && !os.IsExist(err) {
+		fmt.Println("Error creating folder:", err)
+		return err
+	}
+	return nil
+}
+
+func NewMutex() *sync.RWMutex {
+	return &sync.RWMutex{}
 }
