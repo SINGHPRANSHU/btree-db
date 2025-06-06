@@ -5,8 +5,11 @@ import (
 	"os"
 
 	"github.com/singhpranshu/btree-db/src/bplustree"
+	"github.com/singhpranshu/btree-db/src/connection"
 	"github.com/singhpranshu/btree-db/src/constant"
 	"github.com/singhpranshu/btree-db/src/datatype"
+	"github.com/singhpranshu/btree-db/src/parser"
+	"github.com/singhpranshu/btree-db/src/runner"
 )
 
 //                  25  50
@@ -19,8 +22,8 @@ func main() {
 
 	// btree := btree.NewBTree(3)
 
-	query := "Create"
-	tableName := "user"
+	query := "Query"
+	// tableName := "user"
 	var btree *bplustree.BPlusTree
 
 	if query == "Create" {
@@ -80,12 +83,17 @@ func main() {
 		btree.Insert(120, map[string]interface{}{"id": 120, "name": "pranshu"})
 	} else {
 		btrees := bplustree.LoadAllExistingBPlusTree()
-		for _, b := range btrees {
-			if b.GetTable().GetName() == tableName {
-				btree = b
-				break
-			}
+		run := runner.NewRunner(btrees, parser.NewParser())
+		err := connection.NewDBServer("localhost", "8081", run).Start()
+		if err != nil {
+			panic("failed to start db server: " + err.Error())
 		}
+		// for _, b := range btrees {
+		// 	if b.GetTable().GetName() == tableName {
+		// 		btree = b
+		// 		break
+		// 	}
+		// }
 
 	}
 
@@ -93,22 +101,22 @@ func main() {
 	//  10  17   // 25 35 60
 	// 5 6  7          // 10 12 15    //17 20    // 25  30 35    // 40  50    // 60  70  80 90 100
 
-	node := btree.GetRoot()
+	// node := btree.GetRoot()
 
-	fmt.Println(node.Keys, node.Count)
-	nod, valData := btree.Search(120)
-	fmt.Println(nod.Keys, nod.Count, valData)
+	// fmt.Println(node.Keys, node.Count)
+	// nod, valData := btree.Search(120)
+	// fmt.Println(nod.Keys, nod.Count, valData)
 
-	btree.Insert(1200000000000000, map[string]interface{}{"id": 1200000000000000, "name": "pranshu"})
-	nod, valData = btree.Search(90)
-	fmt.Println(nod.Keys, nod.Count, valData)
-	btree.Update(90, map[string]interface{}{"id": 1200000000000000, "name": "prashhu"})
-	nod, valData = btree.Search(90)
-	fmt.Println(nod.Keys, nod.Count, valData)
-	nod, valData = btree.Search(35)
-	fmt.Println(nod.Keys, nod.Count, valData)
-	btree.Delete(35)
-	nod, valData = btree.Search(30)
-	fmt.Println(nod.Keys, nod.Count, valData)
+	// btree.Insert(1200000000000000, map[string]interface{}{"id": 1200000000000000, "name": "pranshu"})
+	// nod, valData = btree.Search(90)
+	// fmt.Println(nod.Keys, nod.Count, valData)
+	// btree.Update(90, map[string]interface{}{"id": 1200000000000000, "name": "prashhu"})
+	// nod, valData = btree.Search(90)
+	// fmt.Println(nod.Keys, nod.Count, valData)
+	// nod, valData = btree.Search(35)
+	// fmt.Println(nod.Keys, nod.Count, valData)
+	// btree.Delete(35)
+	// nod, valData = btree.Search(30)
+	// fmt.Println(nod.Keys, nod.Count, valData)
 
 }
