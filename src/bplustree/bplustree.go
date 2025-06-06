@@ -2,9 +2,7 @@ package bplustree
 
 import (
 	"encoding/binary"
-	"os"
 
-	"github.com/singhpranshu/btree-db/src/constant"
 	"github.com/singhpranshu/btree-db/src/datatype"
 	"github.com/singhpranshu/btree-db/src/storage"
 	"github.com/singhpranshu/btree-db/src/transform"
@@ -96,94 +94,13 @@ func (node *Node) saveValue(value map[string]interface{}) int64 {
 	return pos
 }
 
-func LoadAllExistingBPlusTree() []*BPlusTree {
-	dir, err := os.ReadDir(constant.RootFolder + "/")
+func (node *Node) updateValue(value map[string]interface{}, position int64) error {
+	byteData := transform.TransformTableValue(node.table, value)
+	err := node.valueStore.UpdateAt(position, byteData)
 	if err != nil {
-		panic("failed to read directory")
+		panic("failed to update value")
 	}
-	var btrees []*BPlusTree
-	for _, entry := range dir {
-		if entry.IsDir() {
-			btree := &BPlusTree{
-				Size: 3,
-			}
-			degree = 2 * 3
-			tableName := entry.Name()
-			tableMeta, err := datatype.Load(tableName)
-			if err != nil {
-				panic("failed to load table")
-			}
-			btree.table = tableMeta
-			tabledir, err := os.ReadDir(constant.RootFolder + "/" + tableName)
-			if err != nil {
-				panic("failed to read directory")
-			}
-			for _, entry := range tabledir {
-				if !entry.IsDir() && entry.Name() != "schema" && entry.Name() != "value" {
-					indexName := entry.Name()
-					store := *storage.NewFileStorage(constant.RootFolder+"/"+tableName+"/"+indexName, storage.NewMutex())
-					btree.store = store
-				}
-			}
-			valueStore := *storage.NewFileStorage(constant.RootFolder+"/"+tableName+"/"+"value", storage.NewMutex())
-			btree.valueStore = valueStore
-			btrees = append(btrees, btree)
-
-		}
-	}
-	return btrees
-}
-
-func NewBPlusTree(size int64, indexName string, tableName string, tableMeta *datatype.TableMetadata) *BPlusTree {
-
-	store := *storage.NewFileStorage(constant.RootFolder+"/"+tableName+"/"+indexName, storage.NewMutex())
-	valueStore := *storage.NewFileStorage(constant.RootFolder+"/"+tableName+"/"+"value", storage.NewMutex())
-	err := store.CreateDirectory(constant.RootFolder + "/" + tableName)
-	if err != nil {
-		panic("failed to create directory")
-	}
-	tableMeta.Save(tableName)
-	table, err := datatype.Load(tableName)
-	if err != nil {
-		panic("failed to load table")
-	}
-
-	degree = 2 * size
-	Root := &Node{
-		Keys:       make([]int64, 2*size-1),
-		Children:   make([]int64, 2*size),
-		Leaf:       true,
-		Count:      0,
-		store:      store,
-		table:      table,
-		valueStore: valueStore,
-	}
-	btree := &BPlusTree{
-		Size:       size,
-		store:      store,
-		table:      table,
-		valueStore: valueStore,
-	}
-
-	rootPositionOnDisk := addPadding(CalculateNodeSize(degree))
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, uint64(CalculateNodeSize(degree)))
-	for i := int64(0); i < 8; i++ {
-		rootPositionOnDisk[i] = b[i]
-	}
-	// rootPositionOnDisk[0] = byte(CalculateNodeSize(degree))
-
-	_, err = store.Append(rootPositionOnDisk)
-	// TODO: handle err case
-
-	_, err = store.Append(Root.Serialize())
-
-	if err != nil {
-		// TODO: handle err case
-		panic("failed to append to file")
-	}
-
-	return btree
+	return nil
 }
 
 func (t *BPlusTree) getRootPosition() (int64, error) {
@@ -253,9 +170,10 @@ func (t *BPlusTree) insertNonFull(node *Node, key int64, value map[string]interf
 	i := node.Count - 1
 	if node.Leaf {
 		node.Count++
-		node.Keys[node.Count-1] = 0
+		// node.Keys[node.Count-1] = 0
 		for i >= 0 && key < node.Keys[i] {
 			node.Keys[i+1] = node.Keys[i]
+			node.Children[i+1] = node.Children[i]
 			i--
 		}
 		node.Keys[i+1] = key
@@ -416,6 +334,9 @@ func addPadding(size int64) []byte {
 func (t *BPlusTree) Search(key int64) (*Node, map[string]interface{}) {
 	root := t.GetRoot()
 	node := t.search(root, key)
+	if node == nil {
+		panic("key not found")
+	}
 	node.store = t.store
 	node.table = t.table
 	tab := node.table.GetTypes()
@@ -456,8 +377,143 @@ func (t *BPlusTree) search(node *Node, key int64) *Node {
 	}
 	i++
 	if node.Leaf {
-		return nil
+		panic("key not found")
 	}
 	child := node.getChild(node.Children[i])
 	return t.search(child, key)
+}
+
+func (t *BPlusTree) Delete(key int64) {
+	root := t.GetRoot()
+	if root == nil {
+		return
+	}
+	t.delete(root, key)
+}
+
+func (t *BPlusTree) delete(node *Node, key int64) {
+	if node == nil {
+		return
+	}
+	i := node.Count - 1
+	for i >= 0 && key < node.Keys[i] {
+		i--
+	}
+	if i < node.Count && i >= 0 && node.Leaf && key == node.Keys[i] {
+		node.Count--
+		for j := i; j < node.Count; j++ {
+			node.Keys[j] = node.Keys[j+1]
+			node.Children[j] = node.Children[j+1]
+		}
+		node.save()
+		return
+	}
+	if node.Leaf {
+		panic("key not found")
+	}
+	i++
+	child := node.getChild(node.Children[i])
+	t.delete(child, key)
+	child = node.getChild(node.Children[i])
+	if child.Count < t.Size-1 {
+		t.rebalance(node, i)
+	}
+	child = node.getChild(node.Children[i])
+	println("Deleted key:", key)
+}
+
+//                  25  50
+//          10  17                                      25  35          50  70  90
+// 5   6   7       10   12  15        17 20       25 30     35  40       50  60        70  80      90  100  110  120  1200000
+
+func (t *BPlusTree) rebalance(parent *Node, index int64) {
+	child := parent.getChild(parent.Children[index])
+	if index > 0 {
+		leftSibling := parent.getChild(parent.Children[index-1])
+		if leftSibling.Count > t.Size-1 {
+			if parent.Keys[index] != child.Keys[0] {
+				child.Keys = append([]int64{parent.Keys[index]}, child.Keys...)
+				child.Children[0] = leftSibling.Children[leftSibling.Count]
+			} else {
+				child.Children = append([]int64{leftSibling.Children[leftSibling.Count]}, child.Children...)
+			}
+			child.Count++
+			leftSibling.Count--
+			parent.Keys[index] = leftSibling.Keys[leftSibling.Count-1]
+			leftSibling.save()
+			child.save()
+			parent.save()
+			return
+		}
+	}
+
+	if index < parent.Count {
+		rightSibling := parent.getChild(parent.Children[index+1])
+		if rightSibling.Count > t.Size-1 {
+			// child.Keys = append(child.Keys, parent.Keys[index])
+			// child.Children = append(child.Children, rightSibling.Children[0])
+			child.Keys[child.Count] = parent.Keys[index]
+			child.Children[child.Count+1] = rightSibling.Children[0]
+			child.Count++
+			parent.Keys[index] = rightSibling.Keys[1]
+			for j := 0; j < int(rightSibling.Count); j++ {
+				rightSibling.Keys[j] = rightSibling.Keys[j+1]
+				rightSibling.Children[j] = rightSibling.Children[j+1]
+			}
+			rightSibling.Count--
+			rightSibling.save()
+			child.save()
+			parent.save()
+			return
+		}
+	}
+
+	if index > 0 {
+		leftSibling := parent.getChild(parent.Children[index-1])
+		if parent.Keys[index-1] != child.Keys[0] {
+			leftSibling.Keys[leftSibling.Count] = parent.Keys[index-1]
+			leftSibling.Children[leftSibling.Count+1] = child.Children[0]
+			leftSibling.Count++
+		}
+		for j := int64(0); j < int64(child.Count); j++ {
+			leftSibling.Keys[leftSibling.Count+j] = child.Keys[j]
+			leftSibling.Children[leftSibling.Count+j+1] = child.Children[j]
+		}
+		leftSibling.Count += child.Count
+		leftSibling.Children[leftSibling.Count] = child.Children[child.Count]
+		parent.deleteChild(index)
+		leftSibling.save()
+	} else {
+		rightSibling := parent.getChild(parent.Children[index+1])
+		child.Keys[child.Count] = parent.Keys[index-1]
+		for j := int64(0); j < int64(rightSibling.Count); j++ {
+			child.Keys[child.Count+j] = rightSibling.Keys[j]
+			child.Children[child.Count+j] = rightSibling.Children[j]
+		}
+		child.Count += rightSibling.Count
+		child.Children[child.Count] = rightSibling.Children[rightSibling.Count]
+		parent.deleteChild(index + 1)
+		child.save()
+	}
+	parent.save()
+}
+func (node *Node) deleteChild(index int64) {
+	i := index
+	for i = index; i < node.Count-1; i++ {
+		node.Keys[i] = node.Keys[i+1]
+		node.Children[i+1] = node.Children[i+2]
+	}
+	node.Count--
+	node.save()
+}
+
+func (t *BPlusTree) Update(key int64, newValue map[string]interface{}) {
+	node, oldValue := t.Search(key)
+	if node == nil {
+		panic("key not found")
+	}
+	if oldValue == nil {
+		panic("old value not found")
+	}
+	node.updateValue(newValue, node.Children[0])
 }
