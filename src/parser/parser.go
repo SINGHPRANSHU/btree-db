@@ -1,5 +1,10 @@
 package parser
 
+import (
+	"errors"
+	"strings"
+)
+
 type Parser struct {
 	lexer *Lexer
 }
@@ -57,8 +62,31 @@ func (p *Parser) ParseSelect(tokens []string) (*ParsedData, error) {
 }
 func (p *Parser) ParseInsert(tokens []string) (*ParsedData, error) {
 	// Implement the parsing logic for INSERT statements
-	panic("insert statement not implemented") // No statement to parse
-	return nil, nil
+	//btree.Insert(10, map[string]interface{}{"id": 10, "name": "pranshu"})
+	// insert into tests (col1, col2) values (val1, val2)
+	if len(tokens) < 6 {
+		panic("incorrect insert statement") // No statement to parse
+	}
+	col, val, err := p.getInsertColAndVal(tokens)
+	if err != nil {
+		panic("failed to parse insert statement: " + err.Error()) // Invalid insert statement
+	}
+
+	columns := make([]interface{}, 0)
+	values := make([]interface{}, 0)
+
+	for i := 0; i < len(col); i++ {
+		columns = append(columns, col[i])
+		values = append(values, val[i])
+	}
+
+	return &ParsedData{
+		StatementType: InsertStmtIndex,
+		Data: map[int][]interface{}{
+			TableIndex:     {tokens[2]},
+			InsertColIndex: columns,
+			InsertValIndex: values,
+		}}, nil
 }
 func (p *Parser) ParseUpdate(tokens []string) (*ParsedData, error) {
 	// Implement the parsing logic for UPDATE statements
@@ -109,4 +137,47 @@ func (p *Parser) parseDrop(tokens []string) (*ParsedData, error) {
 	// DROP TABLE TableName
 	panic("drop statement not implemented") // No statement to parse
 	return nil, nil
+}
+
+func (p *Parser) getInsertColAndVal(tokens []string) ([]string, []string, error) {
+	stmt := strings.Join(tokens, " ")
+
+	// insert into tests
+	//  (col1, col2) values
+	//  (val1, val2)
+	splitOpenParenthesis := strings.Split(stmt, "(")
+
+	if len(splitOpenParenthesis) != 3 {
+		return nil, nil, errors.New("invalid stmt") // Invalid insert statement
+	}
+
+	//  col1, col2) values
+	colPart := splitOpenParenthesis[1]
+
+	//  col1, col2
+	//  values
+	colSplitCloseParenthesis := strings.Split(colPart, ")")
+	if len(colSplitCloseParenthesis) != 2 {
+		return nil, nil, errors.New("invalid stmt") // Invalid insert statement
+	}
+
+	// val1, val2)
+	valPart := splitOpenParenthesis[2]
+
+	// val1, val2
+	valSplitCloseParenthesis := strings.Split(valPart, ")")
+	if len(valSplitCloseParenthesis) != 2 {
+		return nil, nil, errors.New("invalid stmt") // Invalid insert statement
+	}
+
+	return trimStrArr(strings.Split(colSplitCloseParenthesis[0], ",")), trimStrArr(strings.Split(valSplitCloseParenthesis[0], ",")), nil
+}
+
+func trimStrArr(arr []string) []string {
+	var result []string
+	for _, str := range arr {
+		trimmed := strings.TrimSpace(str)
+		result = append(result, trimmed)
+	}
+	return result
 }

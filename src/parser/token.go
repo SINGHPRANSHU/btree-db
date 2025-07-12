@@ -10,6 +10,8 @@ const (
 	CreateTypeIndex
 	CreateSizeIndex
 	DropTableIndex
+	InsertColIndex
+	InsertValIndex
 )
 
 const (

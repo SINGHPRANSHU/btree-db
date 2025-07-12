@@ -39,7 +39,7 @@ func (r *Runner) Run(query string) (interface{}, error) {
 			break
 		}
 	}
-	if btree == nil && parsedQuery.StatementType != parser.CreateStmtIndex && parsedQuery.StatementType != parser.DropStmtIndex {
+	if btree == nil && parsedQuery.StatementType != parser.CreateStmtIndex && parsedQuery.StatementType != parser.DropStmtIndex && parsedQuery.StatementType != parser.InsertStmtIndex {
 		panic("table not found in btrees")
 	}
 
@@ -105,6 +105,70 @@ func (r *Runner) Run(query string) (interface{}, error) {
 		}
 		btree = bplustree.NewBPlusTree(3, "primaryKey", tableName, tableMeta)
 		r.Btrees = append(r.Btrees, btree)
+		return nil, nil
+
+	case parser.InsertStmtIndex:
+		colValues, ok := parsedQuery.Data[parser.InsertColIndex]
+		if !ok {
+			panic("column values not found in query")
+		}
+		valValues, ok := parsedQuery.Data[parser.InsertValIndex]
+		if !ok {
+			panic("value values not found in query")
+		}
+
+		if len(colValues) != len(valValues) {
+			panic("number of columns and values do not match")
+		}
+		//btree.Insert(10, map[string]interface{}{"id": 10, "name": "pranshu"})
+		tableTypes := btree.GetTable().GetTypes()
+
+		data := make(map[string]interface{})
+		for i := 0; i < len(colValues); i++ {
+			colName, ok := colValues[i].(string)
+			if !ok {
+				panic("column name is not a string")
+			}
+			data[colName] = interface{}(valValues[i])
+		}
+
+		for _, tableType := range tableTypes {
+			colname := tableType.GetName()
+			coltype := tableType.GetRepresent()
+			colsize := tableType.GetSize()
+
+			if _, ok := data[colname]; !ok {
+				panic(fmt.Sprintf("column %s not found in data", colname))
+			}
+			if _, ok := data[colname]; !ok {
+				panic(fmt.Sprintf("column %s not found in data", colname))
+			}
+			if coltype == "Integer" {
+				val, err := strconv.Atoi(data[colname].(string))
+				if err != nil {
+					panic(fmt.Sprintf("column %s is not an integer: %v", colname, err))
+				}
+				if val < 0 {
+					panic(fmt.Sprintf("column %s exceeds size %d", colname, colsize))
+				}
+				data[colname] = int(val) // Store as int64 for consistency
+			} else if coltype == "Char" {
+				if _, ok := data[colname].(string); !ok {
+					panic(fmt.Sprintf("column %s is not a string", colname))
+				}
+				if len(data[colname].(string)) > colsize {
+					panic(fmt.Sprintf("column %s exceeds size %d", colname, colsize))
+				}
+			} else {
+				panic(fmt.Sprintf("unsupported data type: %s", coltype))
+			}
+		}
+		if _, ok := data["id"].(int); !ok {
+			fmt.Printf("%T", data["id"])
+			panic("id is not an int")
+		}
+
+		btree.Insert(int64(data["id"].(int)), data)
 		return nil, nil
 
 	default:
