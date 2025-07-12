@@ -6,6 +6,10 @@ const (
 	TableIndex = iota
 	WhereColumnIndex
 	WhereValueIndex
+	CreateColumnIndex
+	CreateTypeIndex
+	CreateSizeIndex
+	DropTableIndex
 )
 
 const (
@@ -28,6 +32,8 @@ const (
 	TokenDrop   = "DROP"
 	TokenEqual  = "="
 	TokenValues = "VALUES"
+	TokenTable  = "TABLE"
+	TokenInto   = "INTO"
 )
 
 type Lexer struct {

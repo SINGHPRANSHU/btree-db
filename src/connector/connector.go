@@ -22,12 +22,14 @@ func (t *Terminal) Connect() error {
 	reader := bufio.NewReader(os.Stdin) // Create a reader for standard input
 	for {
 		fmt.Println("Enter the query to send to the server")
+		fmt.Print(">> ")
+		// Read a line from standard input
 		message, err := reader.ReadString('\n') // Read the entire line, including spaces
 		if err != nil {
 			fmt.Println("Error reading input:", err)
 			continue
 		}
-		fmt.Println("Read:", len(message), "Message:", message)
+		fmt.Println("Query:", len(message), "Message:", message)
 		lengthBuffer := make([]byte, 4)
 		binary.LittleEndian.PutUint32(lengthBuffer, uint32(len(message)))
 		t.conn.Write(lengthBuffer)

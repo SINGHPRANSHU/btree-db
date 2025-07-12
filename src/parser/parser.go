@@ -30,6 +30,10 @@ func (p *Parser) Parse(statement string) (*ParsedData, error) {
 		return p.ParseUpdate(tokens)
 	case "DELETE":
 		return p.ParseDelete(tokens)
+	case "CREATE":
+		return p.parseCreate(tokens)
+	case "DROP":
+		return p.parseDrop(tokens)
 	default:
 		panic("invalid statement") // Unsupported statement type
 
@@ -74,4 +78,35 @@ func (p *Parser) ParseDelete(tokens []string) (*ParsedData, error) {
 			WhereColumnIndex: {tokens[4]},
 			WhereValueIndex:  {tokens[6]},
 		}}, nil
+}
+
+func (p *Parser) parseCreate(tokens []string) (*ParsedData, error) {
+	// Implement the parsing logic for CREATE statements
+	//CREATE TABLE TableName Column1 DataType1 size Column2 DataType2 size
+	if len(tokens) < 6 || len(tokens)%3 != 0 || tokens[1] != TokenTable {
+		panic("incorrect create statement") // No statement to parse
+	}
+	tableName := tokens[2]
+	columns := make([]interface{}, 0)
+	values := make([]interface{}, 0)
+	sizes := make([]interface{}, 0)
+	for i := 3; i < len(tokens); i = i + 3 {
+		columns = append(columns, tokens[i])
+		values = append(values, tokens[i+1])
+		sizes = append(sizes, tokens[i+2])
+	}
+	return &ParsedData{
+		StatementType: CreateStmtIndex,
+		Data: map[int][]interface{}{
+			TableIndex:        {tableName},
+			CreateColumnIndex: columns,
+			CreateTypeIndex:   values,
+			CreateSizeIndex:   sizes,
+		}}, nil
+}
+func (p *Parser) parseDrop(tokens []string) (*ParsedData, error) {
+	// Implement the parsing logic for DROP statements
+	// DROP TABLE TableName
+	panic("drop statement not implemented") // No statement to parse
+	return nil, nil
 }

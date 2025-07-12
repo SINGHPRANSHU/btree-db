@@ -1,6 +1,7 @@
 package bplustree
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/singhpranshu/btree-db/src/constant"
@@ -11,7 +12,11 @@ import (
 func LoadAllExistingBPlusTree() []*BPlusTree {
 	dir, err := os.ReadDir(constant.RootFolder + "/")
 	if err != nil {
-		panic("failed to read directory")
+		err := os.Mkdir(constant.RootFolder, os.ModePerm)
+		if err != nil && !os.IsExist(err) {
+			fmt.Println("Error creating folder:", err)
+			panic("failed to root folder")
+		}
 	}
 	var btrees []*BPlusTree
 	for _, entry := range dir {

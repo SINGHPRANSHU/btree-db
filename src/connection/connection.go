@@ -76,8 +76,8 @@ func (db *DBServer) handleClient(conn net.Conn) {
 		}
 
 		// Process and use the data (here, we'll just print it)
-		fmt.Printf("Received: %s\n", string(buffer[0:dataLength-2]))
-		data, err := db.runner.Run(string(buffer[0 : dataLength-2]))
+		fmt.Printf("Received: %s\n", string(buffer[0:dataLength-1]))
+		data, err := db.runner.Run(string(buffer[0 : dataLength-1]))
 		if err != nil {
 			fmt.Println("Error:", err)
 			return

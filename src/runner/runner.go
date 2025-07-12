@@ -2,9 +2,12 @@ package runner
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/singhpranshu/btree-db/src/bplustree"
+	"github.com/singhpranshu/btree-db/src/constant"
+	"github.com/singhpranshu/btree-db/src/datatype"
 	"github.com/singhpranshu/btree-db/src/parser"
 )
 
@@ -26,6 +29,9 @@ func (r *Runner) Run(query string) (interface{}, error) {
 		return nil, err
 	}
 	tableName, ok := parsedQuery.Data[parser.TableIndex][0].(string)
+	if !ok {
+		panic("table name not found in query")
+	}
 	var btree *bplustree.BPlusTree
 	for _, b := range r.Btrees {
 		if b.GetTable().GetName() == tableName {
@@ -33,12 +39,8 @@ func (r *Runner) Run(query string) (interface{}, error) {
 			break
 		}
 	}
-	if btree == nil {
+	if btree == nil && parsedQuery.StatementType != parser.CreateStmtIndex && parsedQuery.StatementType != parser.DropStmtIndex {
 		panic("table not found in btrees")
-	}
-
-	if !ok {
-		panic("table name not found in query")
 	}
 
 	switch parsedQuery.StatementType {
@@ -55,8 +57,56 @@ func (r *Runner) Run(query string) (interface{}, error) {
 
 		_, data := btree.Search(int64(parseIntId))
 		return data, nil
-	case parser.InsertStmtIndex:
-		panic("insert not implemented yet")
+	case parser.CreateStmtIndex:
+		parsedCol, ok := parsedQuery.Data[parser.CreateColumnIndex]
+		if !ok {
+			panic("column names not found in query")
+		}
+		parsedTypes, ok := parsedQuery.Data[parser.CreateTypeIndex]
+		if !ok {
+			panic("column types not found in query")
+		}
+		parsedSize, ok := parsedQuery.Data[parser.CreateSizeIndex]
+		if !ok {
+			panic("column sizes not found in query")
+		}
+		err := os.Mkdir(constant.RootFolder, os.ModePerm)
+		if err != nil && !os.IsExist(err) {
+			fmt.Println("Error creating folder:", err)
+			panic("failed to root folder")
+		}
+		tableMeta := datatype.NewTableMetadata(tableName)
+		for i := 0; i < len(parsedCol); i++ {
+			colName, ok := parsedCol[i].(string)
+			if !ok {
+				panic("column name is not a string")
+			}
+			colType, ok := parsedTypes[i].(string)
+			if !ok {
+				panic("column type is not a string")
+			}
+			colSize, ok := parsedSize[i].(string)
+			if !ok {
+				panic("column size is not an int64")
+			}
+			colIntSize, err := strconv.Atoi(colSize)
+			if err != nil {
+				panic("failed to parse column size: " + colSize)
+			}
+			var dataType datatype.DataType
+			if colType == "Integer" {
+				dataType = datatype.NewInteger(int(colIntSize), colName)
+			} else if colType == "Char" {
+				dataType = datatype.NewChar(int(colIntSize), colName)
+			} else {
+				panic("unsupported data type: " + colType)
+			}
+			tableMeta.AddType(dataType)
+		}
+		btree = bplustree.NewBPlusTree(3, "primaryKey", tableName, tableMeta)
+		r.Btrees = append(r.Btrees, btree)
+		return nil, nil
+
 	default:
 		panic("unsupported statement type")
 	}
