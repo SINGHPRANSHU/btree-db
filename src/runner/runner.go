@@ -171,6 +171,20 @@ func (r *Runner) Run(query string) (interface{}, error) {
 		btree.Insert(int64(data["id"].(int)), data)
 		return nil, nil
 
+	case parser.DeleteStmtIndex:
+		parsedValues, ok := parsedQuery.Data[parser.WhereValueIndex][0].(string)
+		if !ok {
+			panic("where value not found in query")
+		}
+		fmt.Println("parsedValues", parsedValues, parsedValues == "120")
+		parseIntId, err := strconv.Atoi(parsedValues)
+		if err != nil {
+			panic("failed to parse id value")
+		}
+
+		btree.Delete(int64(parseIntId))
+		return nil, nil
+
 	default:
 		panic("unsupported statement type")
 	}

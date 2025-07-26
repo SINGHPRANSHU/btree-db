@@ -77,7 +77,30 @@ func (db *DBServer) handleClient(conn net.Conn) {
 
 		// Process and use the data (here, we'll just print it)
 		fmt.Printf("Received: %s\n", string(buffer[0:dataLength-1]))
-		data, err := db.runner.Run(string(buffer[0 : dataLength-1]))
+
+		isError := false
+
+		data, err := (func() (interface{}, error) {
+			defer (func() {
+				r := recover()
+				isError = true
+				errorstr := fmt.Sprintf("Error: %v", r)
+				lengthBuffer = make([]byte, 4)
+				_, err := conn.Write(binary.LittleEndian.AppendUint32(lengthBuffer, uint32(len(errorstr))))
+				if err != nil {
+					_, err := conn.Write([]byte(fmt.Sprintf("Error: %v", r)))
+					if err != nil {
+						return
+					}
+				}
+			})()
+			return db.runner.Run(string(buffer[0 : dataLength-1]))
+		})()
+		if isError {
+			fmt.Println("Error processing request, response sent to client.")
+			continue
+		}
+		// data, err := db.runner.Run(string(buffer[0 : dataLength-1]))
 		if err != nil {
 			fmt.Println("Error:", err)
 			return
